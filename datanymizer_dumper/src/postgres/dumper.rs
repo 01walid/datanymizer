@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{indicator::Indicator, Dumper, SchemaInspector, Table};
 use anyhow::Result;
-use datanymizer_engine::{Engine, Filter, Settings, TableList};
+use datanymizer_engine::{Engine, Filter, TableList};
 use postgres::IsolationLevel;
 use std::{
     io::{self, prelude::*},
@@ -20,6 +20,7 @@ pub struct PgDumper<W: Write + Send, I: Indicator + Send> {
     dump_isolation_level: Option<IsolationLevel>,
     pg_dump_location: String,
     pg_dump_args: Vec<String>,
+    tables: Vec<PgTable>,
 }
 
 impl<W: 'static + Write + Send, I: 'static + Indicator + Send> PgDumper<W, I> {
@@ -39,6 +40,7 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> PgDumper<W, I> {
             pg_dump_location,
             schema_inspector: PgSchemaInspector {},
             pg_dump_args,
+            tables: Vec::new(),
         })
     }
 
@@ -74,7 +76,6 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> PgDumper<W, I> {
     }
 
     fn dump_table(&mut self, table: &PgTable, qw: &mut QueryWrapper) -> Result<()> {
-        let settings = self.settings();
         let started = Instant::now();
 
         self.write_log(format!("Dump table: {}", &table.get_full_name()))?;
@@ -83,7 +84,7 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> PgDumper<W, I> {
         self.dump_writer.write_all(table.query_from().as_bytes())?;
         self.dump_writer.write_all(b"\n")?;
 
-        let cfg = settings.find_table(&table.get_names());
+        let cfg = self.engine.settings.find_table(&table.get_names());
 
         self.indicator
             .start_pb(table.count_of_query_to(cfg), &table.get_full_name());
@@ -133,7 +134,7 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> PgDumper<W, I> {
         Ok(())
     }
 
-    fn filter_table(&mut self, table: String) -> bool {
+    fn filter_table(&self, table: String) -> bool {
         self.engine
             .settings
             .filter
@@ -151,37 +152,31 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
     // Stage before dumping data. It makes dump schema with any options
     fn pre_data(&mut self, connection: &mut Self::Connection) -> Result<()> {
         self.debug("Prepare data scheme...".into());
-        if self.engine.settings.filter.is_some() {
-            let tables = self
-                .schema_inspector()
-                .ordered_tables(connection)
-                .iter()
-                .map(|(t, _)| t.get_full_name())
-                .collect();
-            if let Some(filter) = &mut self.engine.settings.filter {
-                filter.load_tables(tables);
-            }
+
+        let mut tables = self.schema_inspector().ordered_tables(connection);
+        sort_tables(
+            &mut tables,
+            self.engine.settings.table_order.as_ref().unwrap_or(&vec![]),
+        );
+        self.tables = tables.into_iter().map(|(t, _)| t).collect();
+
+        if let Some(filter) = &mut self.engine.settings.filter {
+            filter.load_tables(self.tables.iter().map(|t| t.get_full_name()).collect());
         }
+
         self.run_pg_dump("pre-data", connection.url.as_str())
     }
 
     // This stage makes dump data only
     fn data(&mut self, connection: &mut Self::Connection) -> Result<()> {
-        let settings = self.settings();
         self.write_log("Start dumping data".into())?;
         self.debug("Fetch tables metadata...".into());
 
-        let mut tables = self.schema_inspector().ordered_tables(connection);
-        sort_tables(
-            &mut tables,
-            settings.table_order.as_ref().unwrap_or(&vec![]),
-        );
-
-        let all_tables_count = tables.len();
+        let all_tables_count = self.tables.len();
 
         let mut query_wrapper =
             QueryWrapper::with_isolation_level(&mut connection.client, self.dump_isolation_level)?;
-        for (ind, (table, _weight)) in tables.iter().enumerate() {
+        for (ind, table) in self.tables.clone().iter().enumerate() {
             self.debug(format!(
                 "[{} / {}] Prepare to dump table: {}",
                 ind + 1,
@@ -208,10 +203,6 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
 
     fn schema_inspector(&self) -> Self::SchemaInspector {
         self.schema_inspector.clone()
-    }
-
-    fn settings(&mut self) -> Settings {
-        self.engine.settings.clone()
     }
 
     fn write_log(&mut self, message: String) -> Result<()> {

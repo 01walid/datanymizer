@@ -1,6 +1,5 @@
 use anyhow::Result;
 use core::iter::Iterator;
-use datanymizer_engine::Settings;
 use indicatif::HumanDuration;
 use solvent::DepGraph;
 use std::{collections::HashMap, hash::Hash, time::Instant};
@@ -35,8 +34,6 @@ pub trait Dumper: 'static + Sized + Send {
     fn post_data(&mut self, _connection: &mut Self::Connection) -> Result<()>;
 
     fn schema_inspector(&self) -> Self::SchemaInspector;
-
-    fn settings(&mut self) -> Settings;
 
     fn write_log(&mut self, message: String) -> Result<()>;
 

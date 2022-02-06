@@ -6,10 +6,8 @@ use wildmatch::WildMatch;
 #[serde(from = "Config")]
 pub struct Filter {
     schema: TableList,
-    #[serde(skip)]
     matched_schema: TableList,
     data: TableList,
-    #[serde(skip)]
     matched_data: TableList,
 }
 
