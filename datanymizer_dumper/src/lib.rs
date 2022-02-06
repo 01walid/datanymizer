@@ -1,6 +1,6 @@
 use anyhow::Result;
 use core::iter::Iterator;
-use datanymizer_engine::{Filter, Settings};
+use datanymizer_engine::Settings;
 use indicatif::HumanDuration;
 use solvent::DepGraph;
 use std::{collections::HashMap, hash::Hash, time::Instant};
@@ -33,14 +33,6 @@ pub trait Dumper: 'static + Sized + Send {
 
     /// This stage makes dump foreign keys, indices and other...
     fn post_data(&mut self, _connection: &mut Self::Connection) -> Result<()>;
-
-    fn filter_table(&mut self, table: String, filter: &Option<Filter>) -> bool {
-        if let Some(f) = filter {
-            f.filter_schema(&table) && f.filter_data(&table)
-        } else {
-            true
-        }
-    }
 
     fn schema_inspector(&self) -> Self::SchemaInspector;
 

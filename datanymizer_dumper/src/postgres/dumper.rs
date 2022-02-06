@@ -132,6 +132,15 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> PgDumper<W, I> {
 
         Ok(())
     }
+
+    fn filter_table(&mut self, table: String) -> bool {
+        self.engine
+            .settings
+            .filter
+            .as_ref()
+            .map(|f| f.filter_table(&table))
+            .unwrap_or(true)
+    }
 }
 
 impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDumper<W, I> {
@@ -142,6 +151,17 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
     // Stage before dumping data. It makes dump schema with any options
     fn pre_data(&mut self, connection: &mut Self::Connection) -> Result<()> {
         self.debug("Prepare data scheme...".into());
+        if self.engine.settings.filter.is_some() {
+            let tables = self
+                .schema_inspector()
+                .ordered_tables(connection)
+                .iter()
+                .map(|(t, _)| t.get_full_name())
+                .collect();
+            if let Some(filter) = &mut self.engine.settings.filter {
+                filter.load_tables(tables);
+            }
+        }
         self.run_pg_dump("pre-data", connection.url.as_str())
     }
 
@@ -169,7 +189,7 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
                 table.get_full_name(),
             ));
 
-            if self.filter_table(table.get_full_name(), &settings.filter) {
+            if self.filter_table(table.get_full_name()) {
                 self.dump_table(table, &mut query_wrapper)?;
             } else {
                 self.debug(format!("[Dumping: {}] --- SKIP ---", table.get_full_name()));
@@ -208,15 +228,14 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
 fn table_args(filter: &Option<Filter>) -> Result<Vec<String>> {
     let mut args = vec![];
     if let Some(f) = filter {
-        if let Some(list) = &f.schema {
-            let flag = match list {
-                TableList::Only(_) => "-t",
-                TableList::Except(_) => "-T",
-            };
-            for table in list.tables() {
-                args.push(String::from(flag));
-                args.push(PgTable::quote_table_name(table.as_str())?);
-            }
+        let list = f.schema_match_list();
+        let flag = match list {
+            TableList::Only(_) => "-t",
+            TableList::Except(_) => "-T",
+        };
+        for table in list.tables() {
+            args.push(String::from(flag));
+            args.push(PgTable::quote_table_name(table.as_str())?);
         }
     }
 
@@ -236,31 +255,33 @@ mod tests {
 
     #[test]
     fn test_table_args() {
+        let tables = vec![String::from("table1"), String::from("table2")];
+
         let empty: Vec<String> = vec![];
         assert_eq!(table_args(&None).unwrap(), empty);
 
-        let filter = Filter {
-            schema: Some(TableList::Except(vec![String::from("table1")])),
-            data: None,
-        };
+        let mut filter = Filter::new(
+            TableList::Except(vec![String::from("table1")]),
+            TableList::default(),
+        );
+        filter.load_tables(tables.clone());
         assert_eq!(
             table_args(&Some(filter)).unwrap(),
             vec![String::from("-T"), String::from("\"table1\"")]
         );
 
-        let filter = Filter {
-            schema: None,
-            data: Some(TableList::Except(vec![String::from("table1")])),
-        };
+        let mut filter = Filter::new(
+            TableList::default(),
+            TableList::Except(vec![String::from("table1")]),
+        );
+        filter.load_tables(tables.clone());
         assert_eq!(table_args(&Some(filter)).unwrap(), empty);
 
-        let filter = Filter {
-            schema: Some(TableList::Only(vec![
-                String::from("table1"),
-                String::from("table2"),
-            ])),
-            data: None,
-        };
+        let mut filter = Filter::new(
+            TableList::Only(vec![String::from("table1"), String::from("table2")]),
+            TableList::default(),
+        );
+        filter.load_tables(tables);
         assert_eq!(
             table_args(&Some(filter)).unwrap(),
             vec![
