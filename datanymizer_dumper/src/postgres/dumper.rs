@@ -267,6 +267,21 @@ mod tests {
             TableList::Only(vec![String::from("table1"), String::from("table2")]),
             TableList::default(),
         );
+        filter.load_tables(tables.clone());
+        assert_eq!(
+            table_args(&Some(filter)).unwrap(),
+            vec![
+                String::from("-t"),
+                String::from("\"table1\""),
+                String::from("-t"),
+                String::from("\"table2\"")
+            ]
+        );
+
+        let mut filter = Filter::new(
+            TableList::Only(vec![String::from("table*")]),
+            TableList::default(),
+        );
         filter.load_tables(tables);
         assert_eq!(
             table_args(&Some(filter)).unwrap(),
