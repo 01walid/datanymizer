@@ -34,6 +34,14 @@ pub trait Dumper: 'static + Sized + Send {
     /// This stage makes dump foreign keys, indices and other...
     fn post_data(&mut self, _connection: &mut Self::Connection) -> Result<()>;
 
+    fn filter_table(&mut self, table: String) -> bool {
+        self.settings()
+            .filter
+            .as_ref()
+            .map(|f| f.filter_table(&table))
+            .unwrap_or(true)
+    }
+
     fn schema_inspector(&self) -> Self::SchemaInspector;
 
     fn settings(&mut self) -> Settings;

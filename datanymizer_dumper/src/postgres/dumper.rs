@@ -133,15 +133,6 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> PgDumper<W, I> {
 
         Ok(())
     }
-
-    fn filter_table(&self, table: String) -> bool {
-        self.engine
-            .settings
-            .filter
-            .as_ref()
-            .map(|f| f.filter_table(&table))
-            .unwrap_or(true)
-    }
 }
 
 impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDumper<W, I> {
