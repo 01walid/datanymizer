@@ -196,8 +196,8 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
         self.schema_inspector.clone()
     }
 
-    fn settings(&mut self) -> Settings {
-        self.engine.settings.clone()
+    fn settings(&self) -> &Settings {
+        &self.engine.settings
     }
 
     fn write_log(&mut self, message: String) -> Result<()> {
