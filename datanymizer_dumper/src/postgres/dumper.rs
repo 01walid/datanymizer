@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{indicator::Indicator, Dumper, SchemaInspector, Table};
 use anyhow::Result;
-use datanymizer_engine::{Engine, Filter, TableList};
+use datanymizer_engine::{Engine, Filter, Settings, TableList};
 use postgres::IsolationLevel;
 use std::{
     io::{self, prelude::*},
@@ -203,6 +203,10 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
 
     fn schema_inspector(&self) -> Self::SchemaInspector {
         self.schema_inspector.clone()
+    }
+
+    fn settings(&mut self) -> Settings {
+        self.engine.settings.clone()
     }
 
     fn write_log(&mut self, message: String) -> Result<()> {
