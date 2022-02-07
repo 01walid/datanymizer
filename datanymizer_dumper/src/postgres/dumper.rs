@@ -142,9 +142,9 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
 
     // Stage before dumping data. It makes dump schema with any options
     fn pre_data(&mut self, connection: &mut Self::Connection) -> Result<()> {
-        self.debug("Prepare data scheme...".into());
-
+        self.debug("Fetch tables metadata...".into());
         let mut tables = self.schema_inspector().ordered_tables(connection);
+
         sort_tables(
             &mut tables,
             self.engine.settings.table_order.as_ref().unwrap_or(&vec![]),
@@ -155,13 +155,13 @@ impl<W: 'static + Write + Send, I: 'static + Indicator + Send> Dumper for PgDump
             filter.load_tables(self.tables.iter().map(|t| t.get_full_name()).collect());
         }
 
+        self.debug("Prepare data scheme...".into());
         self.run_pg_dump("pre-data", connection.url.as_str())
     }
 
     // This stage makes dump data only
     fn data(&mut self, connection: &mut Self::Connection) -> Result<()> {
         self.write_log("Start dumping data".into())?;
-        self.debug("Fetch tables metadata...".into());
 
         let all_tables_count = self.tables.len();
 
