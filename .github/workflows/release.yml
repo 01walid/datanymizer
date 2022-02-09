@@ -32,6 +32,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  release-linux-gnu-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - name: Build
+        run: |
+          cargo build --release --target aarch64-unknown-linux-gnu
+          mv target/aarch64-unknown-linux-gnu/release/pg_datanymizer ./pg_datanymizer
+          chmod +x pg_datanymizer
+          tar -czf pg_datanymizer-linux-aarch64.tar.gz pg_datanymizer
+          rm pg_datanymizer
+      - name: Publish release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: pg_datanymizer-*
+          draft: true
+          body_path: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release-linux-musl:
     runs-on: ubuntu-latest
     steps:
